@@ -13,3 +13,5 @@ sys	0m0,000s
 real	0m0,997s
 user	0m0,297s
 sys	0m0,701s
+
+times() uses the most system time, because it spends time in the kernel counting the actual ticks of the CPU.
