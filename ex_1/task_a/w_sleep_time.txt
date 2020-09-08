@@ -1,0 +1,15 @@
+
+# busy wait with sleep()
+real	0m1,001s
+user	0m0,001s
+sys	0m0,000s
+
+# busy wait with clock_gettime(...)
+real	0m1,001s
+user	0m1,001s
+sys	0m0,000s
+
+# busy wait with times()
+real	0m0,997s
+user	0m0,297s
+sys	0m0,701s
