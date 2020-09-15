@@ -1,0 +1,13 @@
+# What happens?
+  - During the allocation period the computer becomes unresponsive, and when it's done we can see from the resource usage that memory jumps from ~1Gb to ~7.7Gb, Swap was 2.7Gb.
+
+# Whats the difference between "Memory" and "Swap"?
+  - Memory is refering to the main memory also known as the RAM. While Swap or Swap space is a part of the secondary memory/hard drive that is used as "virtual memory".
+    When there is a lack of main memory or the main memory is running low, then data that is not required by the running processes are moved to the virtual memory.
+
+# Change x_dim to 1000 and 10 000
+  - x_dim = 1000: Allocation time is much faster, takes less than 10 seconds compared to minutes. Memory usage is at ~4.8Gb and Swap ~1.5Gb.
+  - x_dim = 10000: Allocation time is even faster, and Memory usage is barley noticeable. Virtuelt minne optimaliserer og setter ikke faktisk av minne pga den tenker det ikke er nødvendig.
+
+# x_dim = 10000, but with zeros to all the memory
+  - Get segfault because we set an actual value to memory we don't have.
