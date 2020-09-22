@@ -1,0 +1,7 @@
+# System time and user time
+The semaphore makes system calls to make sure it works as planned, and in addition some of the semaphore-connected operations are done in the user space.
+
+
+# Real time
+System + User does not add up to Real, because the program is multi threaded and thus uses more CPU time than the actual wall time passed.
+Its like taking two plates out of the dishwasher simultaneously.

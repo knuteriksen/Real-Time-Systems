@@ -1,0 +1,8 @@
+TASK A:
+
+The local variables reaches its correct number, but the global variable does not reach twice of the local variable.
+
+
+TASK B:
+fsanitize reports a data race condition.
+The global variable is not protected from simultaneous access from both threads, and hence the incrementation does not go as planned.
