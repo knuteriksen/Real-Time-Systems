@@ -1,0 +1,222 @@
+#include <stdio.h>
+#include <signal.h>
+#include <unistd.h>
+#include <native/task.h>
+#include <native/sem.h>
+#include <native/mutex.h>
+#include <native/timer.h>
+#include <sys/mman.h>
+#include <pthread.h>
+#include <sched.h>
+#include <rtdk.h>
+
+#define CORE_NUM 1
+
+
+RTIME period_ns = 1000000; // 1 ms
+RTIME pin_wait_us = 5000; // 5 us
+RT_SEM sem;
+RT_MUTEX mutex;
+
+
+
+const char* name = "PERIODIC TASK";
+
+
+int set_cpu(int cpu_number){
+    cpu_set_t cpu;
+
+    CPU_ZERO(&cpu);
+    CPU_SET(cpu_number, &cpu);
+
+    return pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpu);
+}
+
+void busy_wait_us(unsigned long delay){
+	for(; delay > 0; delay--){
+		rt_timer_spin(1000);
+	}
+}
+
+
+//functions to be executed by tasks
+
+void periodic_func(void *arg){
+	unsigned long duration = 30000000000;
+	unsigned long endTime = rt_timer_read() + duration;
+	
+
+	rt_sem_p(&sem, TM_INFINITE);
+	rt_printf("%s\n", arg);
+	rt_sem_v(&sem);
+	
+
+	rt_task_set_periodic(NULL, TM_NOW, period_ns);
+
+	if (rt_timer_read() > endTime){
+		rt_printf("Time expired\n");
+		rt_task_delete(NULL);		
+	}
+	if (rt_task_yield()){
+		rt_printf("No yield\n");
+		rt_task_delete(NULL);
+	}
+
+	return;
+}
+
+void low_func(void *arg){
+	unsigned long duration = 30000000000;
+	unsigned long endTime = rt_timer_read() + duration;
+	rt_printf("Task %s start\n", arg);
+	rt_printf("Task %s Waiting for semaphore\n", arg);
+	rt_sem_p(&sem, TM_INFINITE);
+//	rt_mutex_acquire(&mutex, TM_INFINITE);
+	rt_printf("Task %s got semaphore\n", arg);
+	// Busy wait
+	rt_printf("Task %s busy wait\n", arg);	
+	busy_wait_us(3000);
+
+//	rt_mutex_release(&mutex);
+	rt_sem_v(&sem);
+	rt_printf("Task %s done\n", arg);
+
+	if (rt_timer_read() > endTime){
+		rt_printf("Time expired\n");
+		rt_task_delete(NULL);		
+	}
+	if (rt_task_yield()){
+		rt_printf("No yield\n");
+		rt_task_delete(NULL);
+	}
+
+	return;
+}
+
+void med_func(void *arg){
+	unsigned long duration = 30000000000;
+	unsigned long endTime = rt_timer_read() + duration;
+	
+
+	
+	rt_printf("Task %s start\n", arg);
+	rt_printf("Task %s sleep\n", arg);
+	// Busy wait
+	rt_task_sleep(1*10e6);
+	rt_printf("Task %s busy wait\n", arg);
+	busy_wait_us(5000);
+	rt_printf("Task %s done\n", arg);
+
+	if (rt_timer_read() > endTime){
+		rt_printf("Time expired\n");
+		rt_task_delete(NULL);		
+	}
+	if (rt_task_yield()){
+		rt_printf("No yield\n");
+		rt_task_delete(NULL);
+	}
+
+	return;
+}
+
+void high_func(void *arg){
+	unsigned long duration = 30000000000;
+	unsigned long endTime = rt_timer_read() + duration;
+	rt_printf("Task %s start\n", arg);
+	rt_printf("Task %s sleep\n", arg);
+	rt_task_sleep(2*10e6);
+	rt_printf("Task %s Waiting for semaphore\n", arg);
+	rt_sem_p(&sem, TM_INFINITE);
+//	rt_mutex_acquire(&mutex, TM_INFINITE);
+	rt_printf("Task %s got semaphore\n", arg);
+	// Busy wait
+	rt_printf("Task %s busy wait\n", arg);	
+	busy_wait_us(2000);
+//	rt_mutex_release(&mutex);
+	rt_sem_v(&sem);
+	rt_printf("Task %s done\n", arg);	
+
+	if (rt_timer_read() > endTime){
+		rt_printf("Time expired\n");
+		rt_task_delete(NULL);		
+	}
+	if (rt_task_yield()){
+		rt_printf("No yield\n");
+		rt_task_delete(NULL);
+	}
+
+	return;
+}
+
+
+int main(int argc, char* argv[]){
+	mlockall(MCL_CURRENT|MCL_FUTURE);
+	//set_cpu(CORE_NUM);
+	rt_print_auto_init(1);
+	
+	rt_task_shadow(NULL, "MainTask", 99, T_CPU(CORE_NUM));
+	
+	// Create semaphore
+	rt_sem_create(&sem, "CoolSemaphore", 3, S_PRIO);
+	
+	// Create mutex
+//	rt_mutex_create(&mutex, "coolMutex");
+	
+	// Create tasks
+	RT_TASK task_L;
+	RT_TASK task_M;
+	RT_TASK task_H;		
+	rt_task_create(&task_L, NULL, 0, 50, T_CPU(CORE_NUM));
+	rt_task_create(&task_M, NULL, 0, 51, T_CPU(CORE_NUM));
+	rt_task_create(&task_H, NULL, 0, 52, T_CPU(CORE_NUM));
+	
+	// Start tasks
+	rt_task_start(&task_L, low_func, (void*)("Low"));
+	rt_task_start(&task_M, med_func, (void*)("Med"));
+	rt_task_start(&task_H, high_func, (void*)("High"));
+
+
+	// Sleep 100ms
+	RTIME sleep_time = 100*1000*1000;
+	rt_timer_spin(sleep_time);
+	
+	// Broadcast Semaphore
+	rt_sem_broadcast(&sem);
+
+	// Sleep 100ms
+	rt_timer_spin(sleep_time);
+
+	// Delete semaphore/mutex
+	rt_sem_delete(&sem);
+//	rt_mutex_delete(&mutex);
+	
+
+	return 0;
+}
+
+
+
+
+/* ASCII ART TASK C
+
+Med start
+	Low start
+		Low Done
+			Med Done
+				High start
+					High Done
+
+*/
+
+
+
+
+
+
+
+
+
+
+
+
+
