@@ -13,24 +13,8 @@
 #define CORE_NUM 1
 
 
-RTIME period_ns = 1000000; // 1 ms
-RTIME pin_wait_us = 5000; // 5 us
-RT_SEM sem;
-RT_MUTEX mutex;
-
-
-
-const char* name = "PERIODIC TASK";
-
-
-int set_cpu(int cpu_number){
-    cpu_set_t cpu;
-
-    CPU_ZERO(&cpu);
-    CPU_SET(cpu_number, &cpu);
-
-    return pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpu);
-}
+RT_MUTEX mutexA;
+RT_MUTEX mutexB;
 
 void busy_wait_us(unsigned long delay){
 	for(; delay > 0; delay--){
@@ -41,70 +25,37 @@ void busy_wait_us(unsigned long delay){
 
 //functions to be executed by tasks
 
-void periodic_func(void *arg){
-	unsigned long duration = 30000000000;
-	unsigned long endTime = rt_timer_read() + duration;
-	
-
-	rt_sem_p(&sem, TM_INFINITE);
-	rt_printf("%s\n", arg);
-	rt_sem_v(&sem);
-	
-
-	rt_task_set_periodic(NULL, TM_NOW, period_ns);
-
-	if (rt_timer_read() > endTime){
-		rt_printf("Time expired\n");
-		rt_task_delete(NULL);		
-	}
-	if (rt_task_yield()){
-		rt_printf("No yield\n");
-		rt_task_delete(NULL);
-	}
-
-	return;
-}
-
 void low_func(void *arg){
 	unsigned long duration = 30000000000;
 	unsigned long endTime = rt_timer_read() + duration;
 	rt_printf("Task %s start\n", arg);
-	rt_printf("Task %s Waiting for semaphore\n", arg);
-	rt_sem_p(&sem, TM_INFINITE);
-//	rt_mutex_acquire(&mutex, TM_INFINITE);
-	rt_printf("Task %s got semaphore\n", arg);
-	// Busy wait
-	rt_printf("Task %s busy wait\n", arg);	
-	busy_wait_us(3);
 
-//	rt_mutex_release(&mutex);
-	rt_sem_v(&sem);
-	rt_printf("Task %s done\n", arg);
+	// Take mutex A		
+	rt_printf("Task %s Waiting for Mutex A\n", arg);
+	rt_mutex_acquire(&mutexA, TM_INFINITE);
+	rt_printf("Task %s got Mutex A\n", arg);
 
-	if (rt_timer_read() > endTime){
-		rt_printf("Time expired\n");
-		rt_task_delete(NULL);		
-	}
-	if (rt_task_yield()){
-		rt_printf("No yield\n");
-		rt_task_delete(NULL);
-	}
+	// Busy wait 3 time units
+	rt_printf("Task %s busy wait 1\n", arg);	
+	busy_wait_us(3000);
 
-	return;
-}
+	// Take mutex B
+	rt_printf("Task %s Waiting for Mutex B\n", arg);
+	rt_mutex_acquire(&mutexB, TM_INFINITE);
+	rt_printf("Task %s got Mutex B\n", arg);
 
-void med_func(void *arg){
-	unsigned long duration = 30000000000;
-	unsigned long endTime = rt_timer_read() + duration;
+	// Busy wait 3 time units
+	rt_printf("Task %s busy wait 2\n", arg);	
+	busy_wait_us(3000);
 	
-
+	// Release Mutex B then A
+	rt_mutex_release(&mutexB);
+	rt_mutex_release(&mutexA);
 	
-	rt_printf("Task %s start\n", arg);
-	rt_printf("Task %s sleep\n", arg);
-	// Busy wait
-	rt_task_sleep(1*10e3);
-	rt_printf("Task %s busy wait\n", arg);
-	busy_wait_us(5);
+	// Busy wait 1 time unit
+	rt_printf("Task %s busy wait 3\n", arg);	
+	busy_wait_us(1000);
+
 	rt_printf("Task %s done\n", arg);
 
 	if (rt_timer_read() > endTime){
@@ -122,18 +73,39 @@ void med_func(void *arg){
 void high_func(void *arg){
 	unsigned long duration = 30000000000;
 	unsigned long endTime = rt_timer_read() + duration;
+
 	rt_printf("Task %s start\n", arg);
-	rt_printf("Task %s sleep\n", arg);
-	rt_task_sleep(2*10e3);
-	rt_printf("Task %s Waiting for semaphore\n", arg);
-	rt_sem_p(&sem, TM_INFINITE);
-//	rt_mutex_acquire(&mutex, TM_INFINITE);
-	rt_printf("Task %s got semaphore\n", arg);
-	// Busy wait
-	rt_printf("Task %s busy wait\n", arg);	
-	busy_wait_us(2);
-//	rt_mutex_release(&mutex);
-	rt_sem_v(&sem);
+
+	// Sleep 1 time unit
+	rt_printf("Task %s sleep\n", arg);	
+	rt_task_sleep(1*10e6);
+
+	// Take Mutex B	
+	rt_printf("Task %s Waiting for Mutex B\n", arg);
+	rt_mutex_acquire(&mutexB, TM_INFINITE);
+	rt_printf("Task %s got Mutex B\n", arg);
+
+	// Busy wait 2 Time unit
+	rt_printf("Task %s busy wait 1\n", arg);	
+	busy_wait_us(2000);
+
+	// Take Mutex A
+	rt_printf("Task %s Waiting for Mutex A\n", arg);
+	rt_mutex_acquire(&mutexA, TM_INFINITE);
+	rt_printf("Task %s got Mutex A\n", arg);
+
+	// Busy wait 2 time units
+	rt_printf("Task %s busy wait 2\n", arg);	
+	busy_wait_us(2000);
+
+	//Release mutex A then B
+	rt_mutex_release(&mutexA);
+	rt_mutex_release(&mutexB);
+
+	// Busy wait 1 time unit
+	rt_printf("Task %s busy wait 3\n", arg);	
+	busy_wait_us(1000);
+
 	rt_printf("Task %s done\n", arg);	
 
 	if (rt_timer_read() > endTime){
@@ -151,72 +123,31 @@ void high_func(void *arg){
 
 int main(int argc, char* argv[]){
 	mlockall(MCL_CURRENT|MCL_FUTURE);
-	//set_cpu(CORE_NUM);
+
 	rt_print_auto_init(1);
 	
-	rt_task_shadow(NULL, "MainTask", 99, T_CPU(CORE_NUM));
-	
-	// Create semaphore
-	rt_sem_create(&sem, "CoolSemaphore", 3, S_PRIO);
-	
 	// Create mutex
-//	rt_mutex_create(&mutex, "coolMutex");
+	rt_mutex_create(&mutexA, "Mutex_A");
+	rt_mutex_create(&mutexB, "Mutex_B");
 	
 	// Create tasks
-	RT_TASK task_L;
-	RT_TASK task_M;
-	RT_TASK task_H;		
+	RT_TASK task_H;	
+	RT_TASK task_L;	
+
+	rt_task_create(&task_H, NULL, 0, 70, T_CPU(CORE_NUM));		
 	rt_task_create(&task_L, NULL, 0, 50, T_CPU(CORE_NUM));
-	rt_task_create(&task_M, NULL, 0, 51, T_CPU(CORE_NUM));
-	rt_task_create(&task_H, NULL, 0, 52, T_CPU(CORE_NUM));
-	
+
 	// Start tasks
-	rt_task_start(&task_L, low_func, (void*)("Low"));
-	rt_task_start(&task_M, med_func, (void*)("Med"));
 	rt_task_start(&task_H, high_func, (void*)("High"));
+	rt_task_start(&task_L, low_func, (void*)("Low"));
 
 
-	// Sleep 100ms
-	RTIME sleep_time = 100*1000*1000;
-	rt_timer_spin(sleep_time);
+	// Delete Mutex
+	rt_mutex_delete(&mutexA);
+	rt_mutex_delete(&mutexB);
+
+	while(1);
 	
-	// Broadcast Semaphore
-	rt_sem_broadcast(&sem);
-
-	// Sleep 100ms
-	rt_timer_spin(sleep_time);
-
-	// Delete semaphore/mutex
-	rt_sem_delete(&sem);
-//	rt_mutex_delete(&mutex);
-	
-
 	return 0;
 }
-
-
-
-
-/* ASCII ART TASK C
-
-Med start
-	Low start
-		Low Done
-			Med Done
-				High start
-					High Done
-
-*/
-
-
-
-
-
-
-
-
-
-
-
-
 
